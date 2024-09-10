@@ -1,0 +1,291 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Segni Ox Game</title>
+    <style>
+        body {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            height: 100vh;
+            margin: 0;
+            background: #f0f8ff;
+            font-family: Arial, sans-serif;
+        }
+
+        .container {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            width: 90%;
+            max-width: 600px;
+        }
+
+        .game-container {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            grid-template-rows: repeat(3, 1fr);
+            gap: 5px;
+            width: 100%;
+            max-width: 300px;
+            margin: 20px;
+        }
+
+        .cell {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            width: 100%;
+            height: 100px;
+            background-color: #fff;
+            border: 2px solid #333;
+            font-size: 2rem;
+            cursor: pointer;
+            transition: background-color 0.3s ease;
+        }
+
+        .cell:hover {
+            background-color: #e0f7fa;
+        }
+
+        .cell.x {
+            color: #ff5722;
+        }
+
+        .cell.o {
+            color: #3f51b5;
+        }
+
+        .winner {
+            font-size: 1.5rem;
+            text-align: center;
+            margin-top: 20px;
+            color: #4caf50;
+        }
+
+        .reset-btn, .join-btn, .mark-btn, .chat-btn {
+            display: block;
+            margin: 10px auto;
+            padding: 10px 20px;
+            font-size: 1rem;
+            color: #fff;
+            background-color: #2196f3;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            transition: background-color 0.3s ease;
+        }
+
+        .reset-btn:hover, .join-btn:hover, .mark-btn:hover, .chat-btn:hover {
+            background-color: #1976d2;
+        }
+
+        .join-form, .mark-form, .chat-form {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+
+        .join-form input, .mark-form button, .chat-form input {
+            margin: 10px;
+            padding: 10px;
+            font-size: 1rem;
+            border-radius: 5px;
+            border: 1px solid #ccc;
+        }
+
+        .chat-container {
+            width: 100%;
+            max-width: 300px;
+            margin-top: 20px;
+            display: flex;
+            flex-direction: column;
+            height: 200px;
+            overflow-y: auto;
+            border: 1px solid #ccc;
+            background: #fff;
+        }
+
+        .chat-message {
+            padding: 5px;
+            border-bottom: 1px solid #ddd;
+        }
+
+        .chat-message:last-child {
+            border-bottom: none;
+        }
+
+        .chat-input {
+            display: flex;
+            margin-top: auto;
+        }
+
+        .chat-input input {
+            flex: 1;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div id="join-screen">
+            <div class="join-form">
+                <input type="text" id="username" placeholder="Enter your username">
+                <button class="join-btn" id="join-btn">Join Game</button>
+                <div id="error-message" style="color: red;"></div>
+            </div>
+        </div>
+        <div id="mark-screen" style="display: none;">
+            <div class="mark-form">
+                <button class="mark-btn" id="mark-x">Play as X</button>
+                <button class="mark-btn" id="mark-o">Play as O</button>
+            </div>
+        </div>
+        <div id="game-screen" style="display: none;">
+            <div class="game-container" id="game-container">
+                <div class="cell" data-index="0"></div>
+                <div class="cell" data-index="1"></div>
+                <div class="cell" data-index="2"></div>
+                <div class="cell" data-index="3"></div>
+                <div class="cell" data-index="4"></div>
+                <div class="cell" data-index="5"></div>
+                <div class="cell" data-index="6"></div>
+                <div class="cell" data-index="7"></div>
+                <div class="cell" data-index="8"></div>
+            </div>
+            <div class="winner" id="winner"></div>
+            <button class="reset-btn" id="reset-btn">Reset Game</button>
+            <button class="reset-btn" id="leave-btn">Leave Game</button>
+            <div class="chat-container" id="chat-container">
+                <!-- Chat messages will appear here -->
+            </div>
+            <div class="chat-input">
+                <input type="text" id="chat-message" placeholder="Type a message">
+                <button class="chat-btn" id="send-chat">Send</button>
+            </div>
+        </div>
+        <div id="scoreboard" style="display: none;">
+            <div>Scoreboard:</div>
+            <div>X Wins: <span id="score-x">0</span></div>
+            <div>O Wins: <span id="score-o">0</span></div>
+            <div>Draws: <span id="score-draw">0</span></div>
+        </div>
+    </div>
+
+    <script src="/socket.io/socket.io.js"></script>
+    <script>
+        const socket = io();
+        const cells = document.querySelectorAll('.cell');
+        const winnerDisplay = document.getElementById('winner');
+        const resetButton = document.getElementById('reset-btn');
+        const leaveButton = document.getElementById('leave-btn');
+        const joinScreen = document.getElementById('join-screen');
+        const markScreen = document.getElementById('mark-screen');
+        const gameScreen = document.getElementById('game-screen');
+        const chatContainer = document.getElementById('chat-container');
+        const chatMessageInput = document.getElementById('chat-message');
+        const sendChatButton = document.getElementById('send-chat');
+        const usernameInput = document.getElementById('username');
+        const errorMessage = document.getElementById('error-message');
+        const scoreboard = document.getElementById('scoreboard');
+        let isMyTurn = false;
+
+        document.getElementById('join-btn').addEventListener('click', () => {
+            const username = usernameInput.value.trim();
+            if (username) {
+                socket.emit('joinGame', username);
+            }
+        });
+
+        socket.on('usernameAccepted', (data) => {
+            joinScreen.style.display = 'none';
+            markScreen.style.display = 'block';
+        });
+
+        socket.on('usernameRejected', (message) => {
+            errorMessage.textContent = message;
+        });
+
+        document.getElementById('mark-x').addEventListener('click', () => {
+            socket.emit('chooseMark', 'x');
+            markScreen.style.display = 'none';
+            gameScreen.style.display = 'block';
+            scoreboard.style.display = 'block';
+        });
+
+        document.getElementById('mark-o').addEventListener('click', () => {
+            socket.emit('chooseMark', 'o');
+            markScreen.style.display = 'none';
+            gameScreen.style.display = 'block';
+            scoreboard.style.display = 'block';
+        });
+
+        socket.on('gameState', (gameState) => {
+            updateGame(gameState);
+            updateScoreboard(gameState.scores);
+        });
+
+        function updateGame(gameState) {
+            gameState.board.forEach((value, index) => {
+                const cell = cells[index];
+                cell.textContent = value || '';
+                cell.classList.toggle('x', value === 'x');
+                cell.classList.toggle('o', value === 'o');
+                cell.style.pointerEvents = value ? 'none' : 'auto';
+            });
+
+            if (gameState.winner) {
+                winnerDisplay.textContent = gameState.winner === 'draw' 
+                    ? 'It\'s a Draw!' 
+                    : `Player ${gameState.winner.toUpperCase()} Wins!`;
+                isMyTurn = false;
+            } else {
+                winnerDisplay.textContent = `Player ${gameState.currentPlayer.toUpperCase()}'s Turn`;
+                isMyTurn = gameState.currentPlayer === socket.id;
+            }
+        }
+
+        function updateScoreboard(scores) {
+            document.getElementById('score-x').textContent = scores.x || 0;
+            document.getElementById('score-o').textContent = scores.o || 0;
+            document.getElementById('score-draw').textContent = scores.draw || 0;
+        }
+
+        cells.forEach(cell => cell.addEventListener('click', (event) => {
+            const index = event.target.dataset.index;
+            if (!isMyTurn || event.target.textContent) return;
+
+            socket.emit('move', parseInt(index));
+        }));
+
+        resetButton.addEventListener('click', () => {
+            if (confirm('Are you sure you want to reset the game?')) {
+                socket.emit('reset');
+            }
+        });
+
+        leaveButton.addEventListener('click', () => {
+            socket.disconnect();
+            gameScreen.style.display = 'none';
+            joinScreen.style.display = 'block';
+        });
+
+        sendChatButton.addEventListener('click', () => {
+            const message = chatMessageInput.value.trim();
+            if (message) {
+                socket.emit('chatMessage', message);
+                chatMessageInput.value = '';
+            }
+        });
+
+        socket.on('chatMessage', (message) => {
+            const msgElement = document.createElement('div');
+            msgElement.className = 'chat-message';
+            msgElement.textContent = `${message.username}: ${message.message}`;
+            chatContainer.appendChild(msgElement);
+            chatContainer.scrollTop = chatContainer.scrollHeight;
+        });
+    </script>
+</body>
+</html>
